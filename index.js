@@ -81,6 +81,7 @@ async function handleEvent(event) {
         type: "text",
         text: `[${seat}] ${name}\n${text}`,
       });
+      
 
       // 女の子に返す
       await replyMessage(event.replyToken, {
@@ -170,4 +171,3 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
