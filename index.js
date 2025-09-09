@@ -1,39 +1,76 @@
 import express from "express";
 import line from "@line/bot-sdk";
+import bodyParser from "body-parser";
+import axios from "axios";
 
 const app = express();
+app.use(bodyParser.json());
 
-// LINEの設定（環境変数から読み込む）
+const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
+const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
+
 const config = {
-  channelAccessToken: process.env.LINE_ACCESS_TOKEN,
-  channelSecret: process.env.LINE_CHANNEL_SECRET
+  channelAccessToken: LINE_ACCESS_TOKEN,
+  channelSecret: LINE_CHANNEL_SECRET,
 };
 
 const client = new line.Client(config);
 
-// Webhookエンドポイント
-app.post("/webhook", line.middleware(config), (req, res) => {
-  Promise.all(req.body.events.map(handleEvent))
-    .then(() => res.status(200).end())
-    .catch(err => {
-      console.error(err);
-      res.status(500).end();
-    });
-});
+// 管理者グループIDを保存（メモリ上。再起動すると消える）
+let ADMIN_GROUP_ID = "";
 
-// メッセージを受け取ったときの処理（テスト用オウム返し）
-function handleEvent(event) {
-  if (event.type !== "message" || event.message.type !== "text") {
-    return Promise.resolve(null);
-  }
-
-  return client.replyMessage(event.replyToken, {
-    type: "text",
-    text: "受け取りました: " + event.message.text
-  });
+// LINEに返信
+async function replyMessage(replyToken, text) {
+  await axios.post(
+    "https://api.line.me/v2/bot/message/reply",
+    {
+      replyToken: replyToken,
+      messages: [{ type: "text", text: text }],
+    },
+    { headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` } }
+  );
 }
 
-// サーバー起動
+// LINEにプッシュ送信
+async function pushMessage(to, text) {
+  await axios.post(
+    "https://api.line.me/v2/bot/message/push",
+    {
+      to: to,
+      messages: [{ type: "text", text: text }],
+    },
+    { headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` } }
+  );
+}
+
+app.post("/webhook", async (req, res) => {
+  const events = req.body.events;
+
+  for (let event of events) {
+    if (event.type === "message" && event.message.type === "text") {
+      const text = event.message.text.trim();
+
+      // 管理者グループの登録
+      if (text === "admin set" && event.source.type === "group") {
+        ADMIN_GROUP_ID = event.source.groupId;
+        await replyMessage(event.replyToken, "✅ このグループを管理者に設定しました");
+        continue;
+      }
+
+      // 管理者グループに転送（ユーザーからのDM）
+      if (ADMIN_GROUP_ID && event.source.type === "user") {
+        await pushMessage(ADMIN_GROUP_ID, `[オーダー]\n${text}`);
+        await replyMessage(event.replyToken, "オーダーを転送しました！");
+      } else {
+        // 管理者未設定 or グループ以外 → とりあえずオウム返し
+        await replyMessage(event.replyToken, `受け取りました: ${text}`);
+      }
+    }
+  }
+
+  res.send("OK");
+});
+
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Server is running.");
+  console.log("Server running on port 3000");
 });
