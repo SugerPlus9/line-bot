@@ -6,9 +6,9 @@ import axios from "axios";
 const app = express();
 app.use(bodyParser.json());
 
-const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
-const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID; // ← 環境変数から固定グループを取得
+const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;i2w8g1qQU7mzyBXJRKRcaWexCCdM6h3p3rfp0xXKso9NGxm37c8CQ43vlxDgznmcgg9Hzps0741c2wDNOEqgSRPgfInsrURk4gppVzmQJZBOBgWRZuuep2nbMEo2CUf0Df3oeR1O4wa2k0rssCUhlAdB04t89/1O/w1cDnyilFU=
+const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;df7721d9a9bcc4f8bf1625df60b2bca5
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;C913d1bb80352e75d7a89bb0ea871ee7 // ← 環境変数から固定グループを取得
 
 const config = {
   channelAccessToken: LINE_ACCESS_TOKEN,
@@ -117,3 +117,4 @@ app.post("/webhook", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server running on port 3000");
 });
+
