@@ -1,3 +1,4 @@
+import fetch from "node-fetch";
 {
   "name": "line-bot",
   "version": "1.0.0",
@@ -7,7 +8,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@line/bot-sdk": "^7.5.0",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2"
   }
 }
