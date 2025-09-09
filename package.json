@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 {
   "name": "line-bot",
   "version": "1.0.0",
@@ -12,3 +11,4 @@ import fetch from "node-fetch";
     "node-fetch": "^3.3.2"
   }
 }
+
