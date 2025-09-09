@@ -11,7 +11,7 @@ import fetch from "node-fetch";
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
 // 固定の管理者グループID（ユーザーさんが教えてくれたID）
-const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7";
+const ADMIN_GROUP_ID = "df7721d9a9bcc4f8bf1625df60b2bca5";
 
 // 席一覧（T1〜T6, V, V1〜V3）
 const SEATS = ["T1", "T2", "T3", "T4", "T5", "T6", "V", "V1", "V2", "V3"];
