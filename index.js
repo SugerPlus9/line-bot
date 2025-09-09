@@ -2,7 +2,6 @@ import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
 
-
 const app = express();
 app.use(bodyParser.json());
 
@@ -21,7 +20,7 @@ const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 // =============================
 
 // 管理者グループID（ログで確認した C93... で始まる文字列）
-const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7"; // ← あなたのスクショの groupId をそのまま貼る
+const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7"; // ← あなたのスクショの groupId
 
 // 席一覧
 const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
@@ -81,7 +80,6 @@ async function handleEvent(event) {
         type: "text",
         text: `[${seat}] ${name}\n${text}`,
       });
-      
 
       // 女の子に返す
       await replyMessage(event.replyToken, {
@@ -122,7 +120,7 @@ async function replyMessage(replyToken, message) {
     replyToken: replyToken,
     messages: [message],
   });
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -130,6 +128,10 @@ async function replyMessage(replyToken, message) {
     },
     body: body,
   });
+
+  if (!res.ok) {
+    console.error("replyMessage error:", res.status, await res.text());
+  }
 }
 
 // 管理グループにプッシュ
@@ -139,7 +141,7 @@ async function pushMessage(to, message) {
     to: to,
     messages: [message],
   });
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -147,6 +149,12 @@ async function pushMessage(to, message) {
     },
     body: body,
   });
+
+  if (!res.ok) {
+    console.error("pushMessage error:", res.status, await res.text());
+  } else {
+    console.log("pushMessage success:", await res.text());
+  }
 }
 
 // ユーザー名取得
