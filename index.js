@@ -8,7 +8,7 @@ app.use(bodyParser.json());
 
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
-
+// ここではまだ ADMIN_GROUP_ID は固定しない（まず groupId を調べる）
 const config = {
   channelAccessToken: LINE_ACCESS_TOKEN,
   channelSecret: LINE_CHANNEL_SECRET,
@@ -16,10 +16,7 @@ const config = {
 
 const client = new line.Client(config);
 
-// 管理者グループID（メモリ保存）
-let ADMIN_GROUP_ID = "";
-
-// ユーザーごとの「一時的な席選択」を保存（メモリ）
+// 席の一時記憶
 const pendingSeat = {};
 
 // LINEに返信
@@ -49,7 +46,7 @@ async function pushMessage(to, text) {
   );
 }
 
-// ユーザー名を取得
+// ユーザー名取得
 async function getDisplayName(userId) {
   try {
     const res = await axios.get(`https://api.line.me/v2/bot/profile/${userId}`, {
@@ -62,7 +59,7 @@ async function getDisplayName(userId) {
   }
 }
 
-// 席ボタンを作成
+// 席ボタン
 function seatQuickReply() {
   const seats = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
   return {
@@ -77,43 +74,40 @@ app.post("/webhook", async (req, res) => {
   const events = req.body.events;
 
   for (let event of events) {
+    // ★ groupIdを調べるためログ出力
+    console.log("source info:", event.source);
+
     if (event.type === "message" && event.message.type === "text") {
       const text = event.message.text.trim();
 
-      // 管理者グループ登録
-      if (text === "admin set" && event.source.type === "group") {
-        ADMIN_GROUP_ID = event.source.groupId;
-        await replyMessage(event.replyToken, "✅ このグループを管理者に設定しました");
-        continue;
-      }
-
-      // 女の子（1対1のトーク想定）
+      // 女の子（1対1トーク）
       if (event.source.type === "user") {
         const userId = event.source.userId;
 
-        // 席を選択した場合
+        // 席を選択
         const seats = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
         if (seats.includes(text)) {
-          pendingSeat[userId] = text; // 席を保存
+          pendingSeat[userId] = text;
           await replyMessage(event.replyToken, `${text} を選びました。オーダーを入力してください。`);
           continue;
         }
 
-        // 席が保存されていればオーダーとして処理
+        // 席が選択済みならオーダー処理
         if (pendingSeat[userId]) {
           const seat = pendingSeat[userId];
-          delete pendingSeat[userId]; // 1回だけ使って削除
+          delete pendingSeat[userId]; // 1回使ったらリセット
 
           const name = await getDisplayName(userId);
 
-          if (ADMIN_GROUP_ID) {
-            await pushMessage(ADMIN_GROUP_ID, `[${seat}] ${name}\n${text}`);
-          }
+          // ここは後で ADMIN_GROUP_ID 固定に差し替える
+          // 今は groupId を調べたいので push はスキップ or 任意のID
+          console.log(`[DEBUG] Would push: [${seat}] ${name}\n${text}`);
+
           await replyMessage(event.replyToken, "オーダー承りました。", { items: seatQuickReply().items });
           continue;
         }
 
-        // どの席も選んでなければ、席を選ぶように促す
+        // 席が未選択 → 席を促す
         await replyMessage(event.replyToken, "席を選んでください。", seatQuickReply());
       }
     }
