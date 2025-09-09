@@ -1,4 +1,3 @@
-
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
@@ -7,15 +6,18 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数（LINE Developers で取得）
+// 環境変数から取得するもの
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
+const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 
-// =============================
-// 固定値（管理グループIDを直書き）
-// =============================
-const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7"; // あなたの管理グループID
+// 管理者グループID（Render の環境変数に保存しておく）
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "C913d1bb80352e75d7a89bb0ea871ee7";
+
+// 席一覧
 const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
+
+// 一時的な席選択を保持
 const pendingSeat = {};
 
 // =============================
@@ -40,9 +42,24 @@ app.post("/webhook", async (req, res) => {
 // =============================
 async function handleEvent(event) {
   if (event.type !== "message") return;
+
   const msg = event.message;
 
-  // 個別トーク（女の子）
+  // ===== 管理グループIDの取得 =====
+  if (event.source.type === "group" && msg.type === "text") {
+    if (msg.text.trim() === "開始") {
+      const groupId = event.source.groupId;
+      console.log("取得した管理グループID:", groupId);
+
+      await replyMessage(event.replyToken, {
+        type: "text",
+        text: `このグループを管理グループとして設定しました。\nID: ${groupId}`,
+      });
+      return;
+    }
+  }
+
+  // ===== 女の子からの1対1トーク =====
   if (event.source.type === "user" && msg.type === "text") {
     const userId = event.source.userId;
     const text = msg.text.trim();
@@ -60,11 +77,11 @@ async function handleEvent(event) {
     // 席が選択済みならオーダー処理
     if (pendingSeat[userId]) {
       const seat = pendingSeat[userId];
-      delete pendingSeat[userId];
+      delete pendingSeat[userId]; // 一度使ったらリセット
 
       const name = await getDisplayName(userId);
 
-      // 管理グループに転送
+      // 管理者グループに転送
       await pushMessage(ADMIN_GROUP_ID, {
         type: "text",
         text: `[${seat}] ${name}\n${text}`,
@@ -105,33 +122,39 @@ async function handleEvent(event) {
 // LINEに返信
 async function replyMessage(replyToken, message) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const body = JSON.stringify({ replyToken, messages: [message] });
-  const res = await fetch(url, {
+  const body = JSON.stringify({
+    replyToken: replyToken,
+    messages: [message],
+  });
+  await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body,
+    body: body,
   });
-  if (!res.ok) {
-    console.error("replyMessage error:", res.status, await res.text());
-  }
 }
 
 // 管理グループにプッシュ
 async function pushMessage(to, message) {
-  console.log("pushMessage to:", to);
   const url = "https://api.line.me/v2/bot/message/push";
-  const body = JSON.stringify({ to, messages: [message] });
+  const body = JSON.stringify({
+    to: to,
+    messages: [message],
+  });
+
+  console.log("pushMessage to:", to); // デバッグ用
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body,
+    body: body,
   });
+
   if (!res.ok) {
     const errText = await res.text();
     console.error("pushMessage error:", errText);
