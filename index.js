@@ -1,3 +1,4 @@
+
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
@@ -6,17 +7,16 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数から取得するもの
+// 環境変数
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
-const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
-const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;  
-// 席一覧
+// =============================
+// 固定値・一時保存
+// =============================
 const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
-
-// 一時的な席選択を保持
 const pendingSeat = {};
+let ADMIN_GROUP_ID = null; // グループIDは「グループID」と送信したときに取得
 
 // =============================
 // Webhook エントリーポイント
@@ -43,7 +43,28 @@ async function handleEvent(event) {
 
   const msg = event.message;
 
-  // 女の子からの1対1トーク
+  // =============================
+  // グループからのメッセージ
+  // =============================
+  if (event.source.type === "group" && msg.type === "text") {
+    // 特定ワード「グループID」でIDを返す
+    if (msg.text.trim() === "グループID") {
+      const gid = event.source.groupId;
+      ADMIN_GROUP_ID = gid;
+
+      await replyMessage(event.replyToken, {
+        type: "text",
+        text: `このグループのIDは ${gid} です。コードに固定してください。`,
+      });
+
+      console.log("取得したグループID:", gid);
+      return;
+    }
+  }
+
+  // =============================
+  // 個別トーク（女の子）
+  // =============================
   if (event.source.type === "user" && msg.type === "text") {
     const userId = event.source.userId;
     const text = msg.text.trim();
@@ -61,15 +82,19 @@ async function handleEvent(event) {
     // 席が選択済みならオーダー処理
     if (pendingSeat[userId]) {
       const seat = pendingSeat[userId];
-      delete pendingSeat[userId]; // 一度使ったらリセット
+      delete pendingSeat[userId];
 
       const name = await getDisplayName(userId);
 
-      // 管理者グループに転送
-      await pushMessage(ADMIN_GROUP_ID, {
-        type: "text",
-        text: `[${seat}] ${name}\n${text}`,
-      });
+      if (ADMIN_GROUP_ID) {
+        // 管理グループに転送
+        await pushMessage(ADMIN_GROUP_ID, {
+          type: "text",
+          text: `[${seat}] ${name}\n${text}`,
+        });
+      } else {
+        console.error("管理グループIDが未設定です");
+      }
 
       // 女の子に返す
       await replyMessage(event.replyToken, {
@@ -106,17 +131,14 @@ async function handleEvent(event) {
 // LINEに返信
 async function replyMessage(replyToken, message) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const body = JSON.stringify({
-    replyToken: replyToken,
-    messages: [message],
-  });
+  const body = JSON.stringify({ replyToken, messages: [message] });
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body: body,
+    body,
   });
 
   if (!res.ok) {
@@ -126,24 +148,20 @@ async function replyMessage(replyToken, message) {
 
 // 管理グループにプッシュ
 async function pushMessage(to, message) {
+  console.log("pushMessage to:", to);
   const url = "https://api.line.me/v2/bot/message/push";
-  const body = JSON.stringify({
-    to: to,
-    messages: [message],
-  });
+  const body = JSON.stringify({ to, messages: [message] });
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body: body,
+    body,
   });
-
   if (!res.ok) {
-    console.error("pushMessage error:", res.status, await res.text());
-  } else {
-    console.log("pushMessage success:", await res.text());
+    const errText = await res.text();
+    console.error("pushMessage error:", errText);
   }
 }
 
@@ -169,4 +187,3 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
