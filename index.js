@@ -60,7 +60,7 @@ app.post("/webhook", async (req, res) => {
       // 管理者グループに転送（ユーザーからのDM）
       if (ADMIN_GROUP_ID && event.source.type === "user") {
         await pushMessage(ADMIN_GROUP_ID, `[オーダー]\n${text}`);
-        await replyMessage(event.replyToken, "オーダーを転送しました！");
+        await replyMessage(event.replyToken, "オーダー承りました。");
       } else {
         // 管理者未設定 or グループ以外 → とりあえずオウム返し
         await replyMessage(event.replyToken, `受け取りました: ${text}`);
@@ -74,3 +74,4 @@ app.post("/webhook", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server running on port 3000");
 });
+
