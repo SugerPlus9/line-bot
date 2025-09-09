@@ -8,7 +8,8 @@ app.use(bodyParser.json());
 
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
-// ここではまだ ADMIN_GROUP_ID は固定しない（まず groupId を調べる）
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID; // ← 環境変数から固定グループを取得
+
 const config = {
   channelAccessToken: LINE_ACCESS_TOKEN,
   channelSecret: LINE_CHANNEL_SECRET,
@@ -16,7 +17,7 @@ const config = {
 
 const client = new line.Client(config);
 
-// 席の一時記憶
+// 席の一時記憶（ユーザーごとに短時間だけ保持）
 const pendingSeat = {};
 
 // LINEに返信
@@ -34,7 +35,7 @@ async function replyMessage(replyToken, text, quickReply = null) {
   );
 }
 
-// LINEにプッシュ送信
+// 管理グループにプッシュ送信
 async function pushMessage(to, text) {
   await axios.post(
     "https://api.line.me/v2/bot/message/push",
@@ -74,9 +75,6 @@ app.post("/webhook", async (req, res) => {
   const events = req.body.events;
 
   for (let event of events) {
-    // ★ groupIdを調べるためログ出力
-    console.log("source info:", event.source);
-
     if (event.type === "message" && event.message.type === "text") {
       const text = event.message.text.trim();
 
@@ -99,10 +97,10 @@ app.post("/webhook", async (req, res) => {
 
           const name = await getDisplayName(userId);
 
-          // ここは後で ADMIN_GROUP_ID 固定に差し替える
-          // 今は groupId を調べたいので push はスキップ or 任意のID
-          console.log(`[DEBUG] Would push: [${seat}] ${name}\n${text}`);
+          // 管理グループに送信
+          await pushMessage(ADMIN_GROUP_ID, `[${seat}] ${name}\n${text}`);
 
+          // 女の子に返す
           await replyMessage(event.replyToken, "オーダー承りました。", { items: seatQuickReply().items });
           continue;
         }
