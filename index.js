@@ -7,16 +7,16 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数
+// 環境変数（LINE Developers で取得）
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
 // =============================
-// 固定値・一時保存
+// 固定値（管理グループIDを直書き）
 // =============================
+const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7"; // あなたの管理グループID
 const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
 const pendingSeat = {};
-let ADMIN_GROUP_ID = null; // グループIDは「グループID」と送信したときに取得
 
 // =============================
 // Webhook エントリーポイント
@@ -40,31 +40,9 @@ app.post("/webhook", async (req, res) => {
 // =============================
 async function handleEvent(event) {
   if (event.type !== "message") return;
-
   const msg = event.message;
 
-  // =============================
-  // グループからのメッセージ
-  // =============================
-  if (event.source.type === "group" && msg.type === "text") {
-    // 特定ワード「グループID」でIDを返す
-    if (msg.text.trim() === "グループID") {
-      const gid = event.source.groupId;
-      ADMIN_GROUP_ID = gid;
-
-      await replyMessage(event.replyToken, {
-        type: "text",
-        text: `このグループのIDは ${gid} です。コードに固定してください。`,
-      });
-
-      console.log("取得したグループID:", gid);
-      return;
-    }
-  }
-
-  // =============================
   // 個別トーク（女の子）
-  // =============================
   if (event.source.type === "user" && msg.type === "text") {
     const userId = event.source.userId;
     const text = msg.text.trim();
@@ -86,15 +64,11 @@ async function handleEvent(event) {
 
       const name = await getDisplayName(userId);
 
-      if (ADMIN_GROUP_ID) {
-        // 管理グループに転送
-        await pushMessage(ADMIN_GROUP_ID, {
-          type: "text",
-          text: `[${seat}] ${name}\n${text}`,
-        });
-      } else {
-        console.error("管理グループIDが未設定です");
-      }
+      // 管理グループに転送
+      await pushMessage(ADMIN_GROUP_ID, {
+        type: "text",
+        text: `[${seat}] ${name}\n${text}`,
+      });
 
       // 女の子に返す
       await replyMessage(event.replyToken, {
@@ -140,7 +114,6 @@ async function replyMessage(replyToken, message) {
     },
     body,
   });
-
   if (!res.ok) {
     console.error("replyMessage error:", res.status, await res.text());
   }
