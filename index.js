@@ -16,7 +16,7 @@ const config = {
 
 const client = new line.Client(config);
 
-// 管理者グループIDを保存（メモリ上。再起動すると消える）
+// 管理者グループIDを保存
 let ADMIN_GROUP_ID = "";
 
 // LINEに返信
@@ -43,6 +43,19 @@ async function pushMessage(to, text) {
   );
 }
 
+// ユーザー名を取得
+async function getDisplayName(userId) {
+  try {
+    const res = await axios.get(`https://api.line.me/v2/bot/profile/${userId}`, {
+      headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
+    });
+    return res.data.displayName || "不明なユーザー";
+  } catch (e) {
+    console.error("getDisplayName error:", e.message);
+    return "不明なユーザー";
+  }
+}
+
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
 
@@ -59,10 +72,10 @@ app.post("/webhook", async (req, res) => {
 
       // 管理者グループに転送（ユーザーからのDM）
       if (ADMIN_GROUP_ID && event.source.type === "user") {
-        await pushMessage(ADMIN_GROUP_ID, `[オーダー]\n${text}`);
-        await replyMessage(event.replyToken, "オーダー承りました。");
+        const name = await getDisplayName(event.source.userId);
+        await pushMessage(ADMIN_GROUP_ID, `[${name}] ${text}`);
+        await replyMessage(event.replyToken, "オーダーを転送しました！");
       } else {
-        // 管理者未設定 or グループ以外 → とりあえずオウム返し
         await replyMessage(event.replyToken, `受け取りました: ${text}`);
       }
     }
@@ -74,4 +87,3 @@ app.post("/webhook", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server running on port 3000");
 });
-
