@@ -74,7 +74,7 @@ app.post("/webhook", async (req, res) => {
       if (ADMIN_GROUP_ID && event.source.type === "user") {
         const name = await getDisplayName(event.source.userId);
         await pushMessage(ADMIN_GROUP_ID, `[${name}] ${text}`);
-        await replyMessage(event.replyToken, "オーダーを転送しました！");
+        await replyMessage(event.replyToken, "オーダーを承りました。");
       } else {
         await replyMessage(event.replyToken, `受け取りました: ${text}`);
       }
@@ -87,3 +87,4 @@ app.post("/webhook", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server running on port 3000");
 });
+
