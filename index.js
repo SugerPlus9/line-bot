@@ -12,7 +12,7 @@ const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 
 // 管理者グループID（Render の環境変数に保存しておく）
-const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "C913d1bb80352e75d7a89bb0ea871ee7";
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "C9313d1bb80352e75d7a89bb0ea871ee7";
 
 // 席一覧
 const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
@@ -183,3 +183,4 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
