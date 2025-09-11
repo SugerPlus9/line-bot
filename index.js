@@ -135,7 +135,7 @@ async function handleUserText(event) {
       await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `[${text}] ${name}` });
     }
 
-    await replyMessage(replyToken, seatQuickReply(`${text} を選びました。オーダーを入力してください。`));
+    // 席選択時は返信しない
     return;
   }
 
