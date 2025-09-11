@@ -1,4 +1,3 @@
-
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
@@ -7,7 +6,7 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数（Render のダッシュボードで設定）
+// 環境変数
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
@@ -135,18 +134,22 @@ async function handleUserText(event) {
     if (ADMIN_GROUP_ID) {
       await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `[${text}] ${name}` });
     }
-    return; // 女の子には返答しない
+
+    await replyMessage(replyToken, seatQuickReply(`${text} を選びました。オーダーを入力してください。`));
+    return;
   }
 
   // オーダー入力
   const name = await resolveName(userId);
+  const seat = pendingSeat[userId] || "-";
+
   logOrder(userId, name, text);
 
   if (ADMIN_GROUP_ID) {
-    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `${name}\n${text}` });
+    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `[${seat}] ${name}\n${text}` });
   }
 
-  await replyMessage(replyToken, { type: "text", text: "オーダー承りました。" });
+  await replyMessage(replyToken, seatQuickReply("オーダー承りました。"));
 }
 
 // =============================
@@ -156,14 +159,31 @@ async function handleUserImage(event) {
   const userId = event.source.userId;
   const replyToken = event.replyToken;
   const name = await resolveName(userId);
+  const seat = pendingSeat[userId] || "-";
 
   logOrder(userId, name, "（写真）");
 
   if (ADMIN_GROUP_ID) {
-    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `${name}\n（写真）` });
+    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `[${seat}] ${name}\n（写真）` });
   }
 
-  await replyMessage(replyToken, { type: "text", text: "写真承りました。" });
+  await replyMessage(replyToken, seatQuickReply("写真承りました。"));
+}
+
+// =============================
+// QuickReply生成
+// =============================
+function seatQuickReply(text) {
+  return {
+    type: "text",
+    text: text,
+    quickReply: {
+      items: SEATS.map(seat => ({
+        type: "action",
+        action: { type: "message", label: seat, text: seat }
+      }))
+    }
+  };
 }
 
 // =============================
@@ -220,16 +240,22 @@ function formatShortDate(dateStr) {
 // 名前解決
 // =============================
 async function resolveName(userId) {
+  // 登録済みなら源氏名を返す
   if (nameRegistry[userId]) return nameRegistry[userId];
+
   try {
     const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
       headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
     });
-    if (!res.ok) return userId.slice(0,6);
+    if (!res.ok) return `${userId.slice(0,6)}`;
+
     const data = await res.json();
-    return data.displayName || userId.slice(0,6);
+    const displayName = data.displayName || userId.slice(0,6);
+
+    // 未登録は displayName + (短縮ID)
+    return `${displayName} (${userId.slice(0,6)})`;
   } catch {
-    return userId.slice(0,6);
+    return `${userId.slice(0,6)}`;
   }
 }
 
@@ -263,3 +289,4 @@ async function pushMessage(to, message) {
 // =============================
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
+
