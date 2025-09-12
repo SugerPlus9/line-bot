@@ -6,10 +6,14 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数
+// 固定値（ここを直書きにする）
 // =============================
+
+// LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "";
+
+// 管理グループID（固定で1つ）
+const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7";  // ← あなたのグループIDを直書き済み
 
 // =============================
 // データ保持（メモリ上）
@@ -50,9 +54,7 @@ async function handleEvent(event) {
       const name = await resolveDisplayName(userId);
       logs.push({ userId, text: "写真", displayName: name });
 
-      if (ADMIN_GROUP_ID) {
-        await pushMessage(ADMIN_GROUP_ID, { type: "text", text: "写真" });
-      }
+      await pushMessage(ADMIN_GROUP_ID, { type: "text", text: "写真" });
     }
     return;
   }
@@ -72,7 +74,7 @@ async function handleEvent(event) {
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
       await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
-      if (ADMIN_GROUP_ID) await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
+      await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
       return;
     }
 
@@ -81,9 +83,7 @@ async function handleEvent(event) {
     const name = await resolveDisplayName(userId);
     logs.push({ userId, text, displayName: name });
 
-    if (ADMIN_GROUP_ID) {
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
-    }
+    await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
 
     await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
   }
