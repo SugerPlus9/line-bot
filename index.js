@@ -1,3 +1,4 @@
+
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
@@ -193,7 +194,7 @@ async function handleOrder(event) {
   // 管理グループへ送信
   await pushMessage(ADMIN_GROUP_ID, {
     type: "text",
-    text: seat ? [${seat}] ${displayName}\n${logItem} : `${displayName}\n${logItem}`,
+    text: seat ? `[${seat}] ${displayName}\n${logItem}` : `${displayName}\n${logItem}`,
   });
 
   // 女の子へ返信
@@ -241,7 +242,7 @@ async function getProfile(userId) {
   try {
     const url = `https://api.line.me/v2/bot/profile/${userId}`;
     const res = await fetch(url, {
-      headers: { Authorization: Bearer ${LINE_ACCESS_TOKEN} },
+      headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
     });
     if (!res.ok) return {};
     return await res.json();
