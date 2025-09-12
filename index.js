@@ -8,15 +8,13 @@ app.use(bodyParser.json());
 // =============================
 // 設定
 // =============================
-
-// LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
-// 固定の管理グループID（直書き初期値）
-let adminGroupId = "C9313d1bb80352e75d7a89bb0ea871ee7";
+// 管理グループID（初期は固定値、グループ登録で上書き可）
+let adminGroupId = "C913d1bb80352e75d7a89bb0ea871ee7";
 
 // =============================
-// データ保持（メモリ上）
+// データ保持（メモリ）
 // =============================
 const SEATS = ["T1","T2","T3","T4","T5","T6","V1","V2","V3"];
 const pendingSeat = {}; // ユーザーごとの選択席
@@ -46,35 +44,37 @@ app.post("/webhook", async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== "message") return;
   const msg = event.message;
+  const userId = event.source.userId;
 
-  // ===== 画像（写真） =====
+  // ===== 画像 =====
   if (msg.type !== "text") {
     if (event.source.type === "user") {
-      const userId = event.source.userId;
       const name = await resolveDisplayName(userId);
       logs.push({ userId, text: "写真", displayName: name });
 
       if (adminGroupId) {
-        await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
+        await pushMessage(adminGroupId, {
+          type: "text",
+          text: `[写真]\n${name}`
+        });
       }
     }
     return;
   }
 
   const text = msg.text.trim();
-  const userId = event.source.userId;
 
   // ===== グループ登録 =====
   if (event.source.type === "group" && text === "グループ登録") {
     adminGroupId = event.source.groupId;
-    await replyMessage(event.replyToken, {
+    await pushMessage(adminGroupId, {
       type: "text",
-      text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}`
+      text: `✅ 管理グループとして登録しました。\nID:\n${adminGroupId}`
     });
     return;
   }
 
-  // ===== 管理グループでのコマンド =====
+  // ===== 管理グループのコマンド =====
   if (event.source.type === "group" && event.source.groupId === adminGroupId) {
     await handleAdminCommand(text);
     return;
@@ -85,21 +85,38 @@ async function handleEvent(event) {
     // 席選択
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
-      await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
-      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[${text}]` });
+
+      // 席選択を本人に返答
+      await replyMessage(event.replyToken, {
+        type: "text",
+        text: `${text} 承りました。`
+      });
+
+      // グループにも流す
+      if (adminGroupId) {
+        await pushMessage(adminGroupId, {
+          type: "text",
+          text: `[席選択] ${text}`
+        });
+      }
       return;
     }
 
     // オーダー入力
-    const seat = pendingSeat[userId];
     const name = await resolveDisplayName(userId);
     logs.push({ userId, text, displayName: name });
 
     if (adminGroupId) {
-      await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
+      await pushMessage(adminGroupId, {
+        type: "text",
+        text: `[オーダー]\n${name} ${text}`
+      });
     }
 
-    await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
+    await replyMessage(event.replyToken, {
+      type: "text",
+      text: "オーダー承りました。"
+    });
   }
 }
 
@@ -114,7 +131,10 @@ async function handleAdminCommand(text) {
       const id = parts[1];
       const name = parts[2];
       userNames[id] = name;
-      await pushMessage(adminGroupId, { type: "text", text: `登録: ${id.slice(0,6)} → ${name}` });
+      await pushMessage(adminGroupId, {
+        type: "text",
+        text: `登録: ${id.slice(0,6)} → ${name}`
+      });
     }
     return;
   }
@@ -128,7 +148,10 @@ async function handleAdminCommand(text) {
       const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
       if (foundId) {
         userNames[foundId] = newName;
-        await pushMessage(adminGroupId, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
+        await pushMessage(adminGroupId, {
+          type: "text",
+          text: `${oldName} → ${newName} に変更しました。`
+        });
       }
     }
     return;
@@ -136,7 +159,7 @@ async function handleAdminCommand(text) {
 
   // 名前一覧
   if (text === "名前一覧") {
-    let msg = "📋 登録一覧\n";
+    let msg = "📋 登録名一覧\n";
     if (Object.keys(userNames).length === 0) {
       msg += "なし";
     } else {
