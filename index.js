@@ -191,18 +191,19 @@ async function handleAdminCommand(event) {
 // 補助関数
 // =============================
 
-// 名前解決（登録済み → それを使う / 未登録 → LINE名）
+// 名前解決（登録済み → 登録名 / 未登録 → LINE名 + ID先頭6文字）
 async function resolveName(userId) {
   if (nameMap[userId]) return nameMap[userId]; // 登録名
 
   try {
     const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-      headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` }
+      headers: { Authorization: Bearer ${LINE_ACCESS_TOKEN} }
     });
-    if (!res.ok) return userId.slice(0, 6);
+    if (!res.ok) return userId.slice(0, 6); // ID短縮
     const data = await res.json();
     const lineName = data.displayName || "不明ユーザー";
-    return `${lineName} (${userId.slice(0, 6)})`;  // ← LINE名＋短縮ID
+    // 👇 LINE名 + ID先頭6文字を返す
+    return `${lineName} (${userId.slice(0, 6)})`;
   } catch {
     return userId.slice(0, 6);
   }
@@ -272,5 +273,6 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
 
 
