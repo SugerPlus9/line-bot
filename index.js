@@ -193,14 +193,21 @@ async function handleAdminCommand(event) {
 
 // 名前解決（登録済み → それを使う / 未登録 → LINE名）
 async function resolveName(userId) {
-  if (nameMap[userId]) return nameMap[userId];
-  const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-    headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` }
-  });
-  if (!res.ok) return userId.slice(0, 6);
-  const data = await res.json();
-  return data.displayName || userId.slice(0, 6);
+  if (nameMap[userId]) return nameMap[userId]; // 登録名
+
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+      headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` }
+    });
+    if (!res.ok) return userId.slice(0, 6);
+    const data = await res.json();
+    const lineName = data.displayName || "不明ユーザー";
+    return `${lineName} (${userId.slice(0, 6)})`;  // ← LINE名＋短縮ID
+  } catch {
+    return userId.slice(0, 6);
+  }
 }
+
 
 // ログ保存（日付も一緒に）
 function saveLog(userId, name, text) {
@@ -265,4 +272,5 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
 
