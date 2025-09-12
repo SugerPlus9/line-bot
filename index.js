@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 // LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
-// 固定の管理グループID（直書き）
+// 固定の管理グループID（直書き初期値）
 let adminGroupId = "C913d1bb80352e75d7a89bb0ea871ee7";
 
 // =============================
@@ -55,7 +55,7 @@ async function handleEvent(event) {
       logs.push({ userId, text: "写真", displayName: name });
 
       if (adminGroupId) {
-        await pushMessage(adminGroupId, { type: "text", text: "写真" });
+        await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
       }
     }
     return;
@@ -67,7 +67,10 @@ async function handleEvent(event) {
   // ===== グループ登録 =====
   if (event.source.type === "group" && text === "グループ登録") {
     adminGroupId = event.source.groupId;
-    await pushMessage(adminGroupId, { type: "text", text: "✅ 管理グループとして登録しました。" });
+    await replyMessage(event.replyToken, {
+      type: "text",
+      text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}`
+    });
     return;
   }
 
@@ -83,7 +86,7 @@ async function handleEvent(event) {
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
       await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
-      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text });
+      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[${text}]` });
       return;
     }
 
@@ -93,7 +96,7 @@ async function handleEvent(event) {
     logs.push({ userId, text, displayName: name });
 
     if (adminGroupId) {
-      await pushMessage(adminGroupId, { type: "text", text });
+      await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
     }
 
     await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
