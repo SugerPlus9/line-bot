@@ -6,14 +6,14 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 固定値（ここを直書きにする）
+// 設定
 // =============================
 
 // LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
-// 管理グループID（固定で1つ）
-const ADMIN_GROUP_ID = "C913d1bb80352e75d7a89bb0ea871ee7";  // ← あなたのグループIDを直書き済み
+// 固定の管理グループID（直書き）
+let adminGroupId = "C913d1bb80352e75d7a89bb0ea871ee7";
 
 // =============================
 // データ保持（メモリ上）
@@ -54,7 +54,9 @@ async function handleEvent(event) {
       const name = await resolveDisplayName(userId);
       logs.push({ userId, text: "写真", displayName: name });
 
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text: "写真" });
+      if (adminGroupId) {
+        await pushMessage(adminGroupId, { type: "text", text: "写真" });
+      }
     }
     return;
   }
@@ -62,8 +64,15 @@ async function handleEvent(event) {
   const text = msg.text.trim();
   const userId = event.source.userId;
 
+  // ===== グループ登録 =====
+  if (event.source.type === "group" && text === "グループ登録") {
+    adminGroupId = event.source.groupId;
+    await pushMessage(adminGroupId, { type: "text", text: "✅ 管理グループとして登録しました。" });
+    return;
+  }
+
   // ===== 管理グループでのコマンド =====
-  if (event.source.type === "group" && event.source.groupId === ADMIN_GROUP_ID) {
+  if (event.source.type === "group" && event.source.groupId === adminGroupId) {
     await handleAdminCommand(text);
     return;
   }
@@ -74,7 +83,7 @@ async function handleEvent(event) {
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
       await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
+      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text });
       return;
     }
 
@@ -83,7 +92,9 @@ async function handleEvent(event) {
     const name = await resolveDisplayName(userId);
     logs.push({ userId, text, displayName: name });
 
-    await pushMessage(ADMIN_GROUP_ID, { type: "text", text });
+    if (adminGroupId) {
+      await pushMessage(adminGroupId, { type: "text", text });
+    }
 
     await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
   }
@@ -100,7 +111,7 @@ async function handleAdminCommand(text) {
       const id = parts[1];
       const name = parts[2];
       userNames[id] = name;
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `登録: ${id.slice(0,6)} → ${name}` });
+      await pushMessage(adminGroupId, { type: "text", text: `登録: ${id.slice(0,6)} → ${name}` });
     }
     return;
   }
@@ -114,7 +125,7 @@ async function handleAdminCommand(text) {
       const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
       if (foundId) {
         userNames[foundId] = newName;
-        await pushMessage(ADMIN_GROUP_ID, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
+        await pushMessage(adminGroupId, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
       }
     }
     return;
@@ -130,7 +141,7 @@ async function handleAdminCommand(text) {
         msg += `${name} (${id.slice(0,6)})\n`;
       }
     }
-    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: msg });
+    await pushMessage(adminGroupId, { type: "text", text: msg });
     return;
   }
 
@@ -157,7 +168,7 @@ async function handleAdminCommand(text) {
       grouped += `${k} ×${v}\n`;
     }
 
-    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: summary + grouped });
+    await pushMessage(adminGroupId, { type: "text", text: summary + grouped });
     logs = [];
     return;
   }
