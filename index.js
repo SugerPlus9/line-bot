@@ -11,7 +11,7 @@ app.use(bodyParser.json());
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
 // 管理グループID（初期は固定値、グループ登録で上書き可）
-let adminGroupId = "C913d1bb80352e75d7a89bb0ea871ee7";
+let adminGroupId = "C9313d1bb80352e75d7a89bb0ea871ee7";
 
 // =============================
 // データ保持（メモリ）
