@@ -6,21 +6,23 @@ const app = express();
 app.use(bodyParser.json());
 
 // =============================
-// 環境変数（Renderダッシュボードで設定）
+// 環境変数
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;
+
+// 名前データ（再起動で消える）
+const nameMap = {}; // userId → 登録名
+let logs = {};      // 日付ごとにログを保存
+let currentDate = null;
 
 // =============================
-// メモリ保存（再起動で消える）
+// 席一覧
 // =============================
-let ADMIN_GROUP_ID = null;       // 管理グループID
-const nameMap = {};              // { userId: "源氏名" }
-const logs = [];                 // [{ date, userId, name, text }]
-const SEATS = ["T1","T2","T3","T4","T5","T6","V","V1","V2","V3"];
+const SEATS = ["T1", "T2", "T3", "T4", "T5", "T6", "V1", "V2", "V3"];
 
 // =============================
-// Webhook エントリーポイント
+// Webhook
 // =============================
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
@@ -40,230 +42,213 @@ app.post("/webhook", async (req, res) => {
 // イベント処理
 // =============================
 async function handleEvent(event) {
-  if (event.type !== "message") return;
-  const msg = event.message;
+  if (event.type !== "message" || event.message.type !== "text") return;
 
-  // 管理グループからのコマンド
-  if (event.source.type === "group") {
-    await handleAdminCommand(event);
+  const text = event.message.text.trim();
+  const sourceId =
+    event.source.userId || event.source.groupId || event.source.roomId;
+
+  // 管理グループのコマンド
+  if (event.source.type === "group" && sourceId === ADMIN_GROUP_ID) {
+    await handleAdminCommand(text, event.replyToken);
     return;
   }
 
-  // 女の子から（個別トーク）
+  // 女の子からのオーダー
   if (event.source.type === "user") {
-    const userId = event.source.userId;
-    const text = msg.type === "text" ? msg.text.trim() : "";
-
-    if (msg.type === "text") {
-      // テーブル番号 → そのまま転送
-      if (SEATS.includes(text)) {
-        if (ADMIN_GROUP_ID) {
-          await pushMessage(ADMIN_GROUP_ID, {
-            type: "text",
-            text: text
-          });
-        }
-        await replyMessage(event.replyToken, {
-          type: "text",
-          text: `${text} 承りました。`,
-          quickReply: { items: seatButtons() }
-        });
-        return;
-      }
-
-      // オーダー → 名前付きで転送
-      const name = await resolveName(userId);
-      if (ADMIN_GROUP_ID) {
-        await pushMessage(ADMIN_GROUP_ID, {
-          type: "text",
-          text: `${name} ${text}`
-        });
-      }
-      saveLog(userId, name, text);
-      await replyMessage(event.replyToken, {
-        type: "text",
-        text: "承りました。",
-        quickReply: { items: seatButtons() }
-      });
-      return;
-    }
-
-    if (msg.type === "image") {
-      const name = await resolveName(userId);
-      if (ADMIN_GROUP_ID) {
-        await pushMessage(ADMIN_GROUP_ID, {
-          type: "text",
-          text: `${name} （写真）`
-        });
-      }
-      saveLog(userId, name, "（写真）");
-      await replyMessage(event.replyToken, {
-        type: "text",
-        text: "承りました。",
-        quickReply: { items: seatButtons() }
-      });
-      return;
-    }
+    await handleOrder(event);
   }
 }
 
 // =============================
-// 管理グループ コマンド処理
+// 管理グループコマンド
 // =============================
-async function handleAdminCommand(event) {
-  const text = event.message.type === "text" ? event.message.text.trim() : "";
-  const groupId = event.source.groupId;
-
-  // グループ登録
-  if (text === "グループ登録") {
-    ADMIN_GROUP_ID = groupId;
-    await replyMessage(event.replyToken, { type: "text", text: "管理グループを登録しました。" });
-    return;
-  }
-
+async function handleAdminCommand(text, replyToken) {
   // 名前登録
   if (text.startsWith("名前登録")) {
-    const lines = text.split("\n").slice(1); // 1行目以降
-    for (const line of lines) {
-      const [id, name] = line.trim().split(/\s+/);
-      if (id && name) nameMap[id] = name;
+    const parts = text.split(" ");
+    if (parts.length >= 3) {
+      const id = parts[1];
+      const name = parts[2];
+      nameMap[id] = name;
+      await replyText(replyToken, `名前を登録しました: ${id} → ${name}`);
+    } else {
+      await replyText(replyToken, "使い方: 名前登録 <UserID先頭6桁> <名前>");
     }
-    await replyMessage(event.replyToken, { type: "text", text: "名前を登録しました。" });
     return;
   }
 
   // 名前変更
   if (text.startsWith("名前変更")) {
-    const parts = text.split(/\s+/);
+    const parts = text.split(" ");
     if (parts.length >= 3) {
       const oldName = parts[1];
       const newName = parts[2];
-      for (const [id, n] of Object.entries(nameMap)) {
-        if (n === oldName) nameMap[id] = newName;
+      let updated = false;
+      for (const [id, name] of Object.entries(nameMap)) {
+        if (name === oldName) {
+          nameMap[id] = newName;
+          updated = true;
+        }
       }
-      await replyMessage(event.replyToken, { type: "text", text: `${oldName} を ${newName} に変更しました。` });
+      if (updated) {
+        await replyText(replyToken, `${oldName} を ${newName} に変更しました。`);
+      } else {
+        await replyText(replyToken, `${oldName} は登録されていません。`);
+      }
+    } else {
+      await replyText(replyToken, "使い方: 名前変更 <旧名> <新名>");
     }
     return;
   }
 
   // 名前一覧
   if (text === "名前一覧") {
-    let out = "=== 登録名一覧 ===\n";
+    let msg = "📋 登録一覧:\n";
     for (const [id, name] of Object.entries(nameMap)) {
-      out += `${name} / ${id}\n`;
+      msg += `${name} (${id})\n`;
     }
-    await replyMessage(event.replyToken, { type: "text", text: out });
+    if (msg === "📋 登録一覧:\n") msg = "登録なし";
+    await replyText(replyToken, msg);
     return;
   }
 
   // 営業終了
   if (text === "営業終了") {
-    const targetDate = getBusinessDate();
-    const dayLogs = logs.filter(l => l.date === targetDate);
-
-    if (dayLogs.length === 0) {
-      await replyMessage(event.replyToken, { type: "text", text: `${targetDate} の記録はありません。` });
+    if (!currentDate) {
+      await replyText(replyToken, "本日のログはありません。");
       return;
     }
 
-    let raw = `=== ${targetDate} オーダー一覧 ===\n`;
-    for (const l of dayLogs) raw += `${l.name} ${l.text}\n`;
-
-    let summary = `=== ${targetDate} オーダー集計 ===\n`;
-    const grouped = {};
-    for (const l of dayLogs) {
-      const key = `${l.name} ${l.text}`;
-      grouped[key] = (grouped[key] || 0) + 1;
-    }
-    for (const [k, v] of Object.entries(grouped)) {
-      summary += `${k}×${v}\n`;
+    const todayLogs = logs[currentDate] || [];
+    if (todayLogs.length === 0) {
+      await replyText(replyToken, "本日のログはありません。");
+      return;
     }
 
-    if (ADMIN_GROUP_ID) {
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text: raw });
-      await pushMessage(ADMIN_GROUP_ID, { type: "text", text: summary });
+    // 集計
+    const summary = {};
+    for (const log of todayLogs) {
+      const key = log.name + (log.item === "写真" ? " (写真)" : "");
+      if (!summary[key]) summary[key] = 0;
+      summary[key] += 1;
     }
+
+    let msg = `📌 ${currentDate} のまとめ\n\n--- オーダー一覧 ---\n`;
+    for (const log of todayLogs) {
+      msg += `${log.name} ${log.item}\n`;
+    }
+    msg += "\n--- 集計 ---\n";
+    for (const [key, count] of Object.entries(summary)) {
+      msg += `${key} ×${count}\n`;
+    }
+
+    await pushMessage(ADMIN_GROUP_ID, { type: "text", text: msg });
+
+    // 次の日に備えてリセット
+    logs = {};
+    currentDate = null;
     return;
   }
 }
 
 // =============================
-// 補助関数
+// オーダー処理
 // =============================
+async function handleOrder(event) {
+  const userId = event.source.userId;
+  const text = event.message.text.trim();
 
-// 名前解決（登録済み → 登録名 / 未登録 → LINE名 + ID先頭6文字）
-async function resolveName(userId) {
-  if (nameMap[userId]) return nameMap[userId]; // 登録名
+  const seat = SEATS.find((s) => text.startsWith(s));
+  let orderText = text;
 
-  try {
-    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-      headers: { Authorization: Bearer ${LINE_ACCESS_TOKEN} }
-    });
-    if (!res.ok) return userId.slice(0, 6); // ID短縮
-    const data = await res.json();
-    const lineName = data.displayName || "不明ユーザー";
-    // 👇 LINE名 + ID先頭6文字を返す
-    return `${lineName} (${userId.slice(0, 6)})`;
-  } catch {
-    return userId.slice(0, 6);
+  if (seat) {
+    orderText = text.replace(seat, "").trim();
   }
-}
 
+  // 名前の決定
+  let displayName;
+  if (nameMap[userId]) {
+    displayName = nameMap[userId]; // 登録名
+  } else {
+    const profile = await getProfile(userId);
+    const lineName = profile.displayName || "不明";
+    displayName = `${lineName} (${userId.slice(0, 6)})`;
+  }
 
-// ログ保存（日付も一緒に）
-function saveLog(userId, name, text) {
-  const date = getBusinessDate();
-  logs.push({ date, userId, name, text });
-}
+  const logItem = orderText === "" ? "オーダーなし" : orderText;
 
-// 営業日判定（20:00〜翌6:00 を同一営業日とする）
-function getBusinessDate() {
+  // 日付キーを決定
   const now = new Date();
-  now.setHours(now.getHours() + 9); // JSTに補正（サーバーUTC前提）
-  const h = now.getHours();
-
-  let date = new Date(now);
-  if (h < 6) {
-    date.setDate(date.getDate() - 1); // 翌6:00までは前日扱い
+  let logDate;
+  if (now.getHours() < 6) {
+    now.setDate(now.getDate() - 1);
   }
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-}
+  logDate = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`;
+  currentDate = logDate;
 
-// 席ボタン
-function seatButtons() {
-  return SEATS.map(seat => ({
-    type: "action",
-    action: { type: "message", label: seat, text: seat }
-  }));
+  if (!logs[logDate]) logs[logDate] = [];
+  logs[logDate].push({ name: displayName, item: logItem });
+
+  // 管理グループへ送信
+  await pushMessage(ADMIN_GROUP_ID, {
+    type: "text",
+    text: seat ? [${seat}] ${displayName}\n${logItem} : `${displayName}\n${logItem}`,
+  });
+
+  // 女の子へ返信
+  if (seat) {
+    await replyText(event.replyToken, `${seat} 承りました。`);
+  } else {
+    await replyText(event.replyToken, "オーダー承りました。");
+  }
 }
 
 // =============================
-// LINE API ユーティリティ
+// ユーティリティ
 // =============================
-async function replyMessage(replyToken, message) {
+async function replyText(replyToken, text) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const body = JSON.stringify({ replyToken, messages: [message] });
+  const body = JSON.stringify({
+    replyToken: replyToken,
+    messages: [{ type: "text", text: text }],
+  });
   await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${LINE_ACCESS_TOKEN}`
+      Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body
+    body,
   });
 }
 
 async function pushMessage(to, message) {
+  console.log("pushMessage to:", to);
   const url = "https://api.line.me/v2/bot/message/push";
   const body = JSON.stringify({ to, messages: [message] });
   await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${LINE_ACCESS_TOKEN}`
+      Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
     },
-    body
+    body,
   });
+}
+
+async function getProfile(userId) {
+  try {
+    const url = `https://api.line.me/v2/bot/profile/${userId}`;
+    const res = await fetch(url, {
+      headers: { Authorization: Bearer ${LINE_ACCESS_TOKEN} },
+    });
+    if (!res.ok) return {};
+    return await res.json();
+  } catch (err) {
+    console.error("getProfile error:", err);
+    return {};
+  }
 }
 
 // =============================
@@ -273,6 +258,3 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
-
-
