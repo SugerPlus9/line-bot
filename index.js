@@ -83,16 +83,22 @@ async function handleEvent(event) {
   // ===== 女の子からの入力 =====
   if (event.source.type === "user") {
     // 席選択
-    if (SEATS.includes(text)) {
-      pendingSeat[userId] = text;
-      await replyMessage(event.replyToken, { 
-  type: "text", 
-  text: `${text} 承りました。`,
-  quickReply: seatQuickReply()
-});
-      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[席] ${text}` });
-      return;
-    }
+if (SEATS.includes(text)) {
+  pendingSeat[userId] = text;
+  const name = await resolveDisplayName(userId);
+  await replyMessage(event.replyToken, { 
+    type: "text", 
+    text: `${text} 承りました。`,
+    quickReply: seatQuickReply()
+  });
+  if (adminGroupId) {
+    await pushMessage(adminGroupId, { 
+      type: "text", 
+      text: `${name} ${text}`
+    });
+  }
+  return;
+}
 
     // オーダー入力
     const seat = pendingSeat[userId];
