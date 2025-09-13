@@ -8,18 +8,14 @@ app.use(bodyParser.json());
 // =============================
 // 設定
 // =============================
-
-// LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-
-// 管理グループID（最初は空、グループ登録で設定される）
-let adminGroupId = "";
+let adminGroupId = ""; // グループ登録で設定される
 
 // =============================
-// データ保持（メモリ上）
+// データ保持
 // =============================
 const SEATS = ["T1","T2","T3","T4","T5","T6","V1","V2","V3"];
-const pendingSeat = {}; // ユーザーごとの選択席
+const pendingSeat = {}; // userId → 席
 const userNames = {};   // userId → 登録名
 let logs = [];          // 営業ログ
 
@@ -58,8 +54,7 @@ async function handleEvent(event) {
         await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
       }
 
-      // ユーザーへの返信
-      await replyMessage(event.replyToken, { type: "text", text: "写真承りました。" });
+      await replyMessage(event.replyToken, withSeatButtons("写真承りました。"));
     }
     return;
   }
@@ -76,18 +71,18 @@ async function handleEvent(event) {
     return;
   }
 
-  // ===== 管理グループでのコマンド =====
+  // ===== 管理グループコマンド =====
   if (event.source.type === "group" && event.source.groupId === adminGroupId) {
     await handleAdminCommand(text);
     return;
   }
 
-  // ===== 女の子からの入力 =====
+  // ===== 女の子（ユーザー）からの入力 =====
   if (event.source.type === "user") {
     // 席選択
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
-      await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
+      await replyMessage(event.replyToken, withSeatButtons(`${text} 承りました。`));
       if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[席] ${text}` });
       return;
     }
@@ -101,7 +96,7 @@ async function handleEvent(event) {
       await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
     }
 
-    await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
+    await replyMessage(event.replyToken, withSeatButtons("オーダー承りました。"));
   }
 }
 
@@ -109,29 +104,25 @@ async function handleEvent(event) {
 // 管理グループコマンド
 // =============================
 async function handleAdminCommand(text) {
-  // 名前登録（例: 名前登録U12345678まな）
-  if (text.startsWith("名前登録")) {
-    const raw = text.replace("名前登録", "").trim();
-    if (raw.length > 8) {
-      const id = raw.slice(0,8);
-      const name = raw.slice(8);
-      userNames[id] = name;
-      await pushMessage(adminGroupId, { type: "text", text: `登録: ${id} → ${name}` });
-    }
+  const parts = text.split(/\s+/); // 半角/全角スペース両方対応
+
+  // 名前登録
+  if (parts[0] === "名前登録" && parts.length >= 3) {
+    const id = parts[1];
+    const name = parts[2];
+    userNames[id] = name;
+    await pushMessage(adminGroupId, { type: "text", text: `登録: ${id.slice(0,8)} → ${name}` });
     return;
   }
 
-  // 名前変更（例: 名前変更まなゆみ）
-  if (text.startsWith("名前変更")) {
-    const raw = text.replace("名前変更", "").trim();
-    if (raw.length >= 2) {
-      const oldName = raw.slice(0, Math.floor(raw.length/2));
-      const newName = raw.slice(Math.floor(raw.length/2));
-      const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
-      if (foundId) {
-        userNames[foundId] = newName;
-        await pushMessage(adminGroupId, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
-      }
+  // 名前変更
+  if (parts[0] === "名前変更" && parts.length >= 3) {
+    const oldName = parts[1];
+    const newName = parts[2];
+    const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
+    if (foundId) {
+      userNames[foundId] = newName;
+      await pushMessage(adminGroupId, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
     }
     return;
   }
@@ -143,7 +134,7 @@ async function handleAdminCommand(text) {
       msg += "なし";
     } else {
       for (const [id, name] of Object.entries(userNames)) {
-        msg += `${name} (${id})\n`;
+        msg += `${name} (${id.slice(0,8)})\n`;
       }
     }
     await pushMessage(adminGroupId, { type: "text", text: msg });
@@ -184,7 +175,7 @@ async function handleAdminCommand(text) {
 // =============================
 async function replyMessage(replyToken, message) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const body = JSON.stringify({ replyToken, messages: [message] });
+  const body = JSON.stringify({ replyToken, messages: Array.isArray(message) ? message : [message] });
   await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
@@ -195,7 +186,7 @@ async function replyMessage(replyToken, message) {
 async function pushMessage(to, message) {
   if (!to) return;
   const url = "https://api.line.me/v2/bot/message/push";
-  const body = JSON.stringify({ to, messages: [message] });
+  const body = JSON.stringify({ to, messages: Array.isArray(message) ? message : [message] });
   await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
@@ -204,19 +195,47 @@ async function pushMessage(to, message) {
 }
 
 async function resolveDisplayName(userId) {
-  const shortId = userId.slice(0,8);
-  if (userNames[shortId]) return userNames[shortId]; // 登録済みは登録名
+  if (userNames[userId]) return userNames[userId]; // 登録済みは登録名
   try {
     const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
       headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` }
     });
-    if (!res.ok) return `不明(${shortId})`;
+    if (!res.ok) return `不明(${userId.slice(0,8)})`;
     const data = await res.json();
-    return `${data.displayName} (${shortId})`;
+    return `${data.displayName} (${userId.slice(0,8)})`;
   } catch (e) {
     console.error("resolveDisplayName error:", e);
-    return `不明(${shortId})`;
+    return `不明(${userId.slice(0,8)})`;
   }
+}
+
+// 席ボタン（横スクロール）
+function withSeatButtons(text) {
+  return {
+    type: "flex",
+    altText: text,
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          { type: "text", text, wrap: true },
+          {
+            type: "box",
+            layout: "horizontal",
+            contents: SEATS.map(seat => ({
+              type: "button",
+              action: { type: "message", label: seat, text: seat },
+              flex: 1,
+              height: "sm"
+            })),
+            spacing: "sm"
+          }
+        ]
+      }
+    }
+  };
 }
 
 // =============================
