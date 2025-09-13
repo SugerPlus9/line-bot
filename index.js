@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 // LINE Developers → Messaging API の「チャネルアクセストークン（長期）」
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 
-// 管理グループID（初期は空、"グループ登録"でセットされる）
+// 管理グループID（最初は空、グループ登録で設定される）
 let adminGroupId = "";
 
 // =============================
@@ -48,8 +48,26 @@ async function handleEvent(event) {
   const msg = event.message;
   const userId = event.source.userId;
 
+  // ===== 画像（写真） =====
+  if (msg.type !== "text") {
+    if (event.source.type === "user") {
+      const name = await resolveDisplayName(userId);
+      logs.push({ userId, text: "写真", displayName: name });
+
+      if (adminGroupId) {
+        await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
+      }
+
+      // ユーザーへの返信
+      await replyMessage(event.replyToken, { type: "text", text: "写真承りました。" });
+    }
+    return;
+  }
+
+  const text = msg.text.trim();
+
   // ===== グループ登録 =====
-  if (event.source.type === "group" && msg.type === "text" && msg.text.trim() === "グループ登録") {
+  if (event.source.type === "group" && text === "グループ登録") {
     adminGroupId = event.source.groupId;
     await pushMessage(adminGroupId, { 
       type: "text", 
@@ -59,42 +77,31 @@ async function handleEvent(event) {
   }
 
   // ===== 管理グループでのコマンド =====
-  if (event.source.type === "group" && event.source.groupId === adminGroupId && msg.type === "text") {
-    await handleAdminCommand(msg.text.trim());
+  if (event.source.type === "group" && event.source.groupId === adminGroupId) {
+    await handleAdminCommand(text);
     return;
   }
 
   // ===== 女の子からの入力 =====
   if (event.source.type === "user") {
-    const name = await resolveDisplayName(userId);
-
     // 席選択
-    if (msg.type === "text" && SEATS.includes(msg.text.trim())) {
-      const seat = msg.text.trim();
-      pendingSeat[userId] = seat;
-      await replyMessage(event.replyToken, { type: "text", text: `${seat} 承りました。` });
-      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[席] ${seat}` });
-      return;
-    }
-
-    // 画像（写真）
-    if (msg.type !== "text") {
-      logs.push({ userId, text: "写真", displayName: name });
-      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
+    if (SEATS.includes(text)) {
+      pendingSeat[userId] = text;
+      await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
+      if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[席] ${text}` });
       return;
     }
 
     // オーダー入力
-    if (msg.type === "text") {
-      const text = msg.text.trim();
-      logs.push({ userId, text, displayName: name });
+    const seat = pendingSeat[userId];
+    const name = await resolveDisplayName(userId);
+    logs.push({ userId, text, displayName: name });
 
-      if (adminGroupId) {
-        await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
-      }
-
-      await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
+    if (adminGroupId) {
+      await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
     }
+
+    await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
   }
 }
 
@@ -102,24 +109,24 @@ async function handleEvent(event) {
 // 管理グループコマンド
 // =============================
 async function handleAdminCommand(text) {
-  // 名前登録
+  // 名前登録（例: 名前登録U12345678まな）
   if (text.startsWith("名前登録")) {
-    const parts = text.split(" ");
-    if (parts.length >= 3) {
-      const id = parts[1];
-      const name = parts[2];
+    const raw = text.replace("名前登録", "").trim();
+    if (raw.length > 8) {
+      const id = raw.slice(0,8);
+      const name = raw.slice(8);
       userNames[id] = name;
-      await pushMessage(adminGroupId, { type: "text", text: `登録: ${id.slice(0,8)} → ${name}` });
+      await pushMessage(adminGroupId, { type: "text", text: `登録: ${id} → ${name}` });
     }
     return;
   }
 
-  // 名前変更
+  // 名前変更（例: 名前変更まなゆみ）
   if (text.startsWith("名前変更")) {
-    const parts = text.split(" ");
-    if (parts.length >= 3) {
-      const oldName = parts[1];
-      const newName = parts[2];
+    const raw = text.replace("名前変更", "").trim();
+    if (raw.length >= 2) {
+      const oldName = raw.slice(0, Math.floor(raw.length/2));
+      const newName = raw.slice(Math.floor(raw.length/2));
       const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
       if (foundId) {
         userNames[foundId] = newName;
@@ -136,7 +143,7 @@ async function handleAdminCommand(text) {
       msg += "なし";
     } else {
       for (const [id, name] of Object.entries(userNames)) {
-        msg += `${name} (${id.slice(0,8)})\n`;
+        msg += `${name} (${id})\n`;
       }
     }
     await pushMessage(adminGroupId, { type: "text", text: msg });
@@ -197,17 +204,18 @@ async function pushMessage(to, message) {
 }
 
 async function resolveDisplayName(userId) {
-  if (userNames[userId]) return userNames[userId]; // 登録済みは登録名
+  const shortId = userId.slice(0,8);
+  if (userNames[shortId]) return userNames[shortId]; // 登録済みは登録名
   try {
     const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
       headers: { Authorization: `Bearer ${LINE_ACCESS_TOKEN}` }
     });
-    if (!res.ok) return `不明(${userId.slice(0,8)})`;
+    if (!res.ok) return `不明(${shortId})`;
     const data = await res.json();
-    return `${data.displayName} (${userId.slice(0,8)})`;
+    return `${data.displayName} (${shortId})`;
   } catch (e) {
     console.error("resolveDisplayName error:", e);
-    return `不明(${userId.slice(0,8)})`;
+    return `不明(${shortId})`;
   }
 }
 
