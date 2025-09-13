@@ -53,7 +53,11 @@ async function handleEvent(event) {
       if (adminGroupId) {
         await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
       }
-      await replyMessage(event.replyToken, { type: "text", text: "写真承りました。" });
+      await replyMessage(event.replyToken, { 
+  type: "text", 
+  text: "写真承りました。",
+  quickReply: seatQuickReply()
+});
     }
     return;
   }
@@ -81,7 +85,11 @@ async function handleEvent(event) {
     // 席選択
     if (SEATS.includes(text)) {
       pendingSeat[userId] = text;
-      await replyMessage(event.replyToken, { type: "text", text: `${text} 承りました。` });
+      await replyMessage(event.replyToken, { 
+  type: "text", 
+  text: `${text} 承りました。`,
+  quickReply: seatQuickReply()
+});
       if (adminGroupId) await pushMessage(adminGroupId, { type: "text", text: `[席] ${text}` });
       return;
     }
@@ -95,7 +103,11 @@ async function handleEvent(event) {
       await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
     }
 
-    await replyMessage(event.replyToken, { type: "text", text: "オーダー承りました。" });
+    await replyMessage(event.replyToken, { 
+  type: "text", 
+  text: "オーダー承りました。",
+  quickReply: seatQuickReply()
+});
   }
 }
 
@@ -173,7 +185,21 @@ async function handleAdminCommand(text) {
     return;
   }
 }
-
+// =============================
+// QuickReply: 席ボタン
+// =============================
+function seatQuickReply() {
+  return {
+    items: SEATS.map(seat => ({
+      type: "action",
+      action: {
+        type: "message",
+        label: seat,
+        text: seat
+      }
+    }))
+  };
+}
 // =============================
 // ユーティリティ
 // =============================
