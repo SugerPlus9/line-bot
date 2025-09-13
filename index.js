@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // 設定
 // =============================
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-let adminGroupId = ""; // グループ登録で設定
+let adminGroupId = ""; // グループ登録で設定 
 
 // =============================
 // データ保持
