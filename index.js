@@ -68,17 +68,15 @@ async function handleEvent(event) {
 
   const text = msg.text.trim();
 
-  // ===== グループ登録 =====
-  if ((event.source.type === "group" || event.source.type === "room") && text === "グループ登録") {
-    // グループID or ルームID を保存
-    adminGroupId = event.source.groupId || event.source.roomId;
-
-    await pushMessage(adminGroupId, { 
-      type: "text", 
-      text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}` 
-    });
-    return;
-  }
+// ===== グループ登録 =====
+if (event.source.type === "group" && text === "グループ登録") {
+  adminGroupId = event.source.groupId;  // ← groupIdを保存
+  await pushMessage(adminGroupId, { 
+    type: "text", 
+    text: `管理グループとして登録しました。\nID: ${adminGroupId}` 
+  });
+  return;
+}
 
   // ===== 管理グループでのコマンド =====
   if (event.source.type === "group" && event.source.groupId === adminGroupId) {
