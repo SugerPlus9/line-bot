@@ -40,6 +40,10 @@ app.post("/webhook", async (req, res) => {
 // イベント処理
 // =============================
 async function handleEvent(event) {
+  // 👇ここでイベントの中身を確認
+  console.log("=== Incoming Event ===");
+  console.log(JSON.stringify(event, null, 2));
+
   if (event.type !== "message") return;
   const msg = event.message;
   const userId = event.source.userId;
