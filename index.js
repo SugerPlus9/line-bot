@@ -72,10 +72,16 @@ async function handleEvent(event) {
 if (event.source.type === "group" && text === "グループ登録") {
   adminGroupId = event.source.groupId;  // ← groupIdを保存
 
-  // pushMessage ではなく replyMessage で即返答する
+  // グループに即返信（reply）
   await replyMessage(event.replyToken, { 
     type: "text", 
     text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}` 
+  });
+
+  // さらに確認で pushMessage も送っておく
+  await pushMessage(adminGroupId, { 
+    type: "text", 
+    text: "このグループが管理グループとして設定されました。"
   });
 
   return;
