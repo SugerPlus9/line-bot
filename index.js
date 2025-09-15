@@ -236,11 +236,21 @@ async function pushMessage(to, message) {
   if (!to) return;
   const url = "https://api.line.me/v2/bot/message/push";
   const body = JSON.stringify({ to, messages: [message] });
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
-    body
-  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
+      body
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("pushMessage error:", res.status, data);
+    } else {
+      console.log("pushMessage success:", data);
+    }
+  } catch (e) {
+    console.error("pushMessage exception:", e);
+  }
 }
 
 async function resolveDisplayName(userId) {
