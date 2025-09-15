@@ -40,10 +40,6 @@ app.post("/webhook", async (req, res) => {
 // イベント処理
 // =============================
 async function handleEvent(event) {
-  // 👇ここでイベントの中身を確認
-  console.log("=== Incoming Event ===");
-  console.log(JSON.stringify(event, null, 2));
-
   if (event.type !== "message") return;
   const msg = event.message;
   const userId = event.source.userId;
@@ -58,34 +54,32 @@ async function handleEvent(event) {
         await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
       }
       await replyMessage(event.replyToken, { 
-  type: "text", 
-  text: "写真承りました。",
-  quickReply: seatQuickReply()
-});
+        type: "text", 
+        text: "写真承りました。",
+        quickReply: seatQuickReply()
+      });
     }
     return;
   }
 
   const text = msg.text.trim();
 
-// ===== グループ登録 =====
-if (event.source.type === "group" && text === "グループ登録") {
-  adminGroupId = event.source.groupId;  // ← groupIdを保存
+  // ===== グループ登録 =====
+  if (event.source.type === "group" && text === "グループ登録") {
+    adminGroupId = event.source.groupId;  // ← groupIdを保存
 
-  // グループに即返信（reply）
-  await replyMessage(event.replyToken, { 
-    type: "text", 
-    text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}` 
-  });
+    await replyMessage(event.replyToken, { 
+      type: "text", 
+      text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}` 
+    });
 
-  // さらに確認で pushMessage も送っておく
-  await pushMessage(adminGroupId, { 
-    type: "text", 
-    text: "このグループが管理グループとして設定されました。"
-  });
+    await pushMessage(adminGroupId, { 
+      type: "text", 
+      text: "このグループが管理グループとして設定されました。"
+    });
 
-  return;
-}
+    return;
+  }
 
   // ===== 管理グループでのコマンド =====
   if (event.source.type === "group" && event.source.groupId === adminGroupId) {
@@ -96,37 +90,32 @@ if (event.source.type === "group" && text === "グループ登録") {
   // ===== 女の子からの入力 =====
   if (event.source.type === "user") {
     // 席選択
-if (SEATS.includes(text)) {
-  pendingSeat[userId] = text;
-  const name = await resolveDisplayName(userId);
-  await replyMessage(event.replyToken, { 
-    type: "text", 
-    text: `${text} 承りました。`,
-    quickReply: seatQuickReply()
-  });
-  if (adminGroupId) {
-    await pushMessage(adminGroupId, { 
-      type: "text", 
-      text: `${name} ${text}`
-    });
-  }
-  return;
-}
+    if (SEATS.includes(text)) {
+      pendingSeat[userId] = text;
+      await replyMessage(event.replyToken, { 
+        type: "text", 
+        text: `${text} 承りました。`,
+        quickReply: seatQuickReply()
+      });
+      return; // グループには送らない
+    }
 
     // オーダー入力
     const seat = pendingSeat[userId];
     const name = await resolveDisplayName(userId);
+
+    let logText = seat ? `${name} ${seat} ${text}` : `${name} ${text}`;
     logs.push({ userId, text, displayName: name });
 
     if (adminGroupId) {
-      await pushMessage(adminGroupId, { type: "text", text: `${name} ${text}` });
+      await pushMessage(adminGroupId, { type: "text", text: logText });
     }
 
     await replyMessage(event.replyToken, { 
-  type: "text", 
-  text: "オーダー承りました。",
-  quickReply: seatQuickReply()
-});
+      type: "text", 
+      text: "オーダー承りました。",
+      quickReply: seatQuickReply()
+    });
   }
 }
 
@@ -204,6 +193,7 @@ async function handleAdminCommand(text) {
     return;
   }
 }
+
 // =============================
 // QuickReply: 席ボタン
 // =============================
@@ -219,6 +209,7 @@ function seatQuickReply() {
     }))
   };
 }
+
 // =============================
 // ユーティリティ
 // =============================
