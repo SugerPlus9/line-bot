@@ -50,14 +50,16 @@ async function handleEvent(event) {
       const name = await resolveDisplayName(userId);
       logs.push({ userId, text: "写真", displayName: name });
 
-      if (adminGroupId) {
-        await pushMessage(adminGroupId, { type: "text", text: `${name} 写真` });
-      }
       await replyMessage(event.replyToken, { 
         type: "text", 
         text: "写真承りました。",
         quickReply: seatQuickReply()
       });
+
+      // 管理グループに「オーダーが入りました」を通知
+      if (adminGroupId) {
+        await multicastMessage([adminGroupId], { type: "text", text: "📢 オーダーが入りました" });
+      }
     }
     return;
   }
@@ -66,24 +68,18 @@ async function handleEvent(event) {
 
   // ===== グループ登録 =====
   if (event.source.type === "group" && text === "グループ登録") {
-    adminGroupId = event.source.groupId;  // ← groupIdを保存
+    adminGroupId = event.source.groupId;
 
     await replyMessage(event.replyToken, { 
       type: "text", 
       text: `✅ 管理グループとして登録しました。\nID: ${adminGroupId}` 
     });
-
-    await pushMessage(adminGroupId, { 
-      type: "text", 
-      text: "このグループが管理グループとして設定されました。"
-    });
-
     return;
   }
 
   // ===== 管理グループでのコマンド =====
   if (event.source.type === "group" && event.source.groupId === adminGroupId) {
-    await handleAdminCommand(text);
+    await handleAdminCommand(text, event.replyToken);
     return;
   }
 
@@ -97,32 +93,32 @@ async function handleEvent(event) {
         text: `${text} 承りました。`,
         quickReply: seatQuickReply()
       });
-      return; // グループには送らない
+      return;
     }
 
     // オーダー入力
     const seat = pendingSeat[userId];
     const name = await resolveDisplayName(userId);
-
-    let logText = seat ? `${name} ${seat} ${text}` : `${name} ${text}`;
-    logs.push({ userId, text, displayName: name });
-
-    if (adminGroupId) {
-      await pushMessage(adminGroupId, { type: "text", text: logText });
-    }
+    const logText = seat ? `${name} ${seat} ${text}` : `${name} ${text}`;
+    logs.push({ userId, text: logText, displayName: name });
 
     await replyMessage(event.replyToken, { 
       type: "text", 
       text: "オーダー承りました。",
       quickReply: seatQuickReply()
     });
+
+    // 管理グループに「オーダーが入りました」を通知
+    if (adminGroupId) {
+      await multicastMessage([adminGroupId], { type: "text", text: "📢 オーダーが入りました" });
+    }
   }
 }
 
 // =============================
 // 管理グループコマンド
 // =============================
-async function handleAdminCommand(text) {
+async function handleAdminCommand(text, replyToken) {
   // 名前登録（例: 名前登録 U1234567まな）
   if (text.startsWith("名前登録")) {
     const raw = text.replace("名前登録", "").trim();
@@ -130,7 +126,7 @@ async function handleAdminCommand(text) {
     const name = raw.slice(8).trim();
     if (shortId && name) {
       userNames[shortId] = name;
-      await pushMessage(adminGroupId, { type: "text", text: `登録: ${shortId} → ${name}` });
+      await replyMessage(replyToken, { type: "text", text: `登録: ${shortId} → ${name}` });
     }
     return;
   }
@@ -145,7 +141,7 @@ async function handleAdminCommand(text) {
       const foundId = Object.keys(userNames).find(id => userNames[id] === oldName);
       if (foundId) {
         userNames[foundId] = newName;
-        await pushMessage(adminGroupId, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
+        await replyMessage(replyToken, { type: "text", text: `${oldName} → ${newName} に変更しました。` });
       }
     }
     return;
@@ -161,7 +157,21 @@ async function handleAdminCommand(text) {
         msg += `${name} (${id})\n`;
       }
     }
-    await pushMessage(adminGroupId, { type: "text", text: msg });
+    await replyMessage(replyToken, { type: "text", text: msg });
+    return;
+  }
+
+  // 「オーダーが入りました」でオーダー内容を表示
+  if (text === "オーダーが入りました") {
+    if (logs.length === 0) {
+      await replyMessage(replyToken, { type: "text", text: "オーダーはまだありません。" });
+      return;
+    }
+    let summary = "📋 現在のオーダー一覧\n";
+    logs.forEach(item => {
+      summary += `${item.text}\n`;
+    });
+    await replyMessage(replyToken, { type: "text", text: summary });
     return;
   }
 
@@ -174,21 +184,20 @@ async function handleAdminCommand(text) {
     // 一覧
     let summary = `=== ${dateStr} オーダー一覧 ===\n`;
     logs.forEach(item => {
-      summary += `${item.displayName} ${item.text}\n`;
+      summary += `${item.text}\n`;
     });
 
     // 集計
     const counts = {};
     logs.forEach(item => {
-      const key = `${item.displayName} ${item.text}`;
-      counts[key] = (counts[key] || 0) + 1;
+      counts[item.text] = (counts[item.text] || 0) + 1;
     });
     let grouped = `\n=== ${dateStr} オーダー集計 ===\n`;
     for (const [k,v] of Object.entries(counts)) {
       grouped += `${k} ×${v}\n`;
     }
 
-    await pushMessage(adminGroupId, { type: "text", text: summary + grouped });
+    await replyMessage(replyToken, { type: "text", text: summary + grouped });
     logs = [];
     return;
   }
@@ -223,25 +232,14 @@ async function replyMessage(replyToken, message) {
   });
 }
 
-async function pushMessage(to, message) {
-  if (!to) return;
-  const url = "https://api.line.me/v2/bot/message/push";
+async function multicastMessage(to, message) {
+  const url = "https://api.line.me/v2/bot/message/multicast";
   const body = JSON.stringify({ to, messages: [message] });
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
-      body
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("pushMessage error:", res.status, data);
-    } else {
-      console.log("pushMessage success:", data);
-    }
-  } catch (e) {
-    console.error("pushMessage exception:", e);
-  }
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_ACCESS_TOKEN}` },
+    body
+  });
 }
 
 async function resolveDisplayName(userId) {
